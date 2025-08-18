@@ -8,7 +8,7 @@ import threading
 from flask import Flask
 
 # ===== Telegram Bot =====
-BOT_TOKEN = os.environ.get("BOT_TOKEN")
+BOT_TOKEN = os.environ.get("8294188586:AAEOQdJZySFXMeWSiFMi6zhpgzezCq1YL14")
 if not BOT_TOKEN:
     raise ValueError("Դուք պետք է ավելացնեք BOT_TOKEN որպես Environment Variable")
 bot = telebot.TeleBot(BOT_TOKEN)
