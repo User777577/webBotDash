@@ -3,7 +3,7 @@ import requests
 import time
 import os
 
-BOT_TOKEN = os.getenv("BOT_TOKEN")
+BOT_TOKEN = os.getenv("7229517351:AAHuNnkmy24JBfkWHJaXia9EgvT_b5ZFc2w")
 
 bot = telebot.TeleBot(BOT_TOKEN)
 
