@@ -8,7 +8,7 @@ import threading
 from flask import Flask
 
 # ===== Telegram Bot =====
-BOT_TOKEN = os.environ.get("8294188586:AAEOQdJZySFXMeWSiFMi6zhpgzezCq1YL14")
+BOT_TOKEN = os.getenv("8294188586:AAEOQdJZySFXMeWSiFMi6zhpgzezCq1YL14")
 if not BOT_TOKEN:
     raise ValueError("Դուք պետք է ավելացնեք BOT_TOKEN որպես Environment Variable")
 bot = telebot.TeleBot(BOT_TOKEN)
@@ -115,4 +115,5 @@ def run_flask():
 # ===== Start threads =====
 threading.Thread(target=monitor, daemon=True).start()
 threading.Thread(target=run_flask, daemon=True).start()
-bot.polling(none_stop=True)
+bot.infinity_polling()
+
