@@ -8,7 +8,7 @@ import threading
 from flask import Flask
 
 # ===== Telegram Bot =====
-BOT_TOKEN = os.getenv("8294188586:AAEOQdJZySFXMeWSiFMi6zhpgzezCq1YL14")
+BOT_TOKEN = os.getenv("BOT_TOKEN")  # Ավելացրու Render-ում որպես Environment Variable
 if not BOT_TOKEN:
     raise ValueError("Դուք պետք է ավելացնեք BOT_TOKEN որպես Environment Variable")
 bot = telebot.TeleBot(BOT_TOKEN)
@@ -17,19 +17,15 @@ USERS_FILE = "users.json"
 SENT_TX_FILE = "sent_txs.json"
 
 # ===== helpers =====
-def load_users():
-    return json.load(open(USERS_FILE, "r", encoding="utf-8")) if os.path.exists(USERS_FILE) else {}
+def load_json(file):
+    return json.load(open(file, "r", encoding="utf-8")) if os.path.exists(file) else {}
 
-def save_users(users):
-    with open(USERS_FILE, "w", encoding="utf-8") as f:
-        json.dump(users, f, ensure_ascii=False, indent=2)
+def save_json(file, data):
+    with open(file, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
 
-def load_sent_txs():
-    return json.load(open(SENT_TX_FILE, "r", encoding="utf-8")) if os.path.exists(SENT_TX_FILE) else {}
-
-def save_sent_txs(sent):
-    with open(SENT_TX_FILE, "w", encoding="utf-8") as f:
-        json.dump(sent, f, ensure_ascii=False, indent=2)
+users = load_json(USERS_FILE)
+sent_txs = load_json(SENT_TX_FILE)
 
 def get_dash_price_usd():
     try:
@@ -48,12 +44,18 @@ def get_latest_txs(address):
 def format_alert(address, amount_dash, amount_usd, txid, timestamp, tx_number):
     link = f"https://blockchair.com/dash/transaction/{txid}"
     usd_text = f" (${amount_usd:.2f})" if amount_usd else ""
-    return f"🔔 Նոր փոխանցում #{tx_number}!\n\n📌 Address: {address}\n💰 Amount: {amount_dash:.8f} DASH{usd_text}\n🕒 Time: {timestamp}\n🔗 {link}"
+    return (
+        f"🔔 Նոր փոխանցում #{tx_number}!\n\n"
+        f"📌 Address: {address}\n"
+        f"💰 Amount: {amount_dash:.8f} DASH{usd_text}\n"
+        f"🕒 Time: {timestamp}\n"
+        f"🔗 {link}\n\n"
+        f"Blockchair ({link})\n"
+        f"Dash transaction {txid}\n"
+        f"Inspect Dash transaction {txid}: check hash, date, and event details with Blockchair."
+    )
 
 # ===== Telegram Handlers =====
-users = load_users()
-sent_txs = load_sent_txs()
-
 @bot.message_handler(commands=["start"])
 def start(msg):
     bot.reply_to(msg, "Բարև 👋\nԳրի՛ր քո Dash հասցեն (սկսվում է X-ով):")
@@ -65,42 +67,39 @@ def save_address(msg):
     users.setdefault(user_id, [])
     if address not in users[user_id]:
         users[user_id].append(address)
-    save_users(users)
+    save_json(USERS_FILE, users)
     sent_txs.setdefault(user_id, {})
     sent_txs[user_id].setdefault(address, [])
-    save_sent_txs(sent_txs)
+    save_json(SENT_TX_FILE, sent_txs)
     bot.reply_to(msg, f"✅ Հասցեն {address} պահպանվեց!")
 
-# ===== Monitor loop =====
+# ===== Background monitor =====
 def monitor():
     while True:
         price = get_dash_price_usd()
         timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
-
         for user_id, addresses in users.items():
             for address in addresses:
                 txs = get_latest_txs(address)
                 known = sent_txs.get(user_id, {}).get(address, [])
-                known = [json.loads(t) if isinstance(t, str) else t for t in known]
-                last_number = max([t["num"] for t in known], default=0)
-
+                last_number = len(known)
                 for tx in reversed(txs):
                     txid = tx.get("hash")
-                    if txid in [t["txid"] for t in known]:
+                    if txid in known:
                         continue
                     amount_dash = sum(out.get("value",0)/1e8 for out in tx.get("outputs", []) if address in (out.get("addresses") or []))
                     if amount_dash <=0:
                         continue
                     amount_usd = amount_dash*price if price else None
-                    last_number +=1
-                    text = format_alert(address, amount_dash, amount_usd, txid, timestamp, last_number)
+                    last_number += 1
+                    alert_text = format_alert(address, amount_dash, amount_usd, txid, timestamp, last_number)
                     try:
-                        bot.send_message(user_id, text)
+                        bot.send_message(user_id, alert_text)
                     except Exception as e:
                         print("Send error:", e)
-                    known.append({"txid": txid,"num": last_number})
-                sent_txs.setdefault(user_id, {})[address]=known
-                save_sent_txs(sent_txs)
+                    known.append(txid)
+                sent_txs.setdefault(user_id, {})[address] = known
+        save_json(SENT_TX_FILE, sent_txs)
         time.sleep(30)
 
 # ===== Flask server =====
@@ -116,4 +115,5 @@ def run_flask():
 threading.Thread(target=monitor, daemon=True).start()
 threading.Thread(target=run_flask, daemon=True).start()
 bot.infinity_polling()
+
 
